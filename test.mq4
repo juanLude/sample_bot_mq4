@@ -42,7 +42,7 @@ void OnDeinit(const int reason)
 void OnTick()
   {
 //---
-    Alert("");
+    //Alert("");
    
    //---narrow bands
    double bbLower1 = iBands(NULL,0,bbPeriod,band1Std,0,PRICE_CLOSE,MODE_LOWER,0);
@@ -53,7 +53,7 @@ void OnTick()
    double bbUpper2 = iBands(NULL,0,bbPeriod,band2Std,0,PRICE_CLOSE,MODE_UPPER,0);
    //--- Check if there are no orders alredy placed 
    
-   if(!CheckIfOpenOrdersByMagicNumber(magicNumber) // if no open orders, get into new position
+   if(!CheckIfOpenOrdersByMagicNumber(magicNumber)) // if no open orders, get into new position
    {
       if(Ask < bbLower1)//buying
       {
@@ -70,7 +70,7 @@ void OnTick()
       else if(Bid > bbUpper1)//shorting
       {
          Alert("Price is above bbUpper1, Sending short order");
-         double stopLossPrice = NormalizeDouble(bbUppe  r2,Digits);
+         double stopLossPrice = NormalizeDouble(bbUpper2,Digits);
          double takeProfitPrice = NormalizeDouble(bbMid,Digits);
          Alert("Entry Price = " + Bid);
          Alert("Stop Loss Price = " + stopLossPrice);
@@ -81,13 +81,13 @@ void OnTick()
       }
      // else {Alert("No signal was found.");
       
-    } 
+   } 
     else  // if position already opened, update if required
     {
     Alert("Order already open");
     if(OrderSelect(orderID,SELECT_BY_TICKET))
     {
-      int orderType = OrderType() // OrderType() returns whether it is a long/short position 0= long, 1=short
+      int orderType = OrderType(); // OrderType() returns whether it is a long/short position 0= long, 1=short
       
       double currentExitPoint;
       if(orderType == 0)
@@ -98,7 +98,24 @@ void OnTick()
       {
          currentExitPoint = NormalizeDouble(bbUpper2,Digits); // it is short so, hit stop loss if price goes up
       }
-    }
-    }
+      
+      double currentMidLine = NormalizeDouble(bbMid,Digits);
+     
+      double TP = OrderTakeProfit();
+      double SL = OrderStopLoss();
+      
+      if(TP != currentMidLine || SL != currentExitPoint)
+      {
+         bool ans = OrderModify(orderID,OrderOpenPrice(),currentExitPoint,currentMidLine,0);
+         if(ans == true)
+         {
+            Alert("order modified: " + orderID);
+         }
+      }
+    
+    
+   }
   }
+  }
+
 //+------------------------------------------------------------------+
