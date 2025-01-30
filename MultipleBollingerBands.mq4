@@ -58,7 +58,7 @@ void OnTick()
    
    double rsiValue = iRSI(NULL,0,rsiPeriod,PRICE_CLOSE,0);
    
-   if(!CheckIfOpenOrdersByMagicNB(magicNB))//if no open orders try to enter new position
+   if(!CheckIfOpenOrdersByMagicNumber(magicNB))//if no open orders try to enter new position
    {
       if(Ask < bbLowerEntry && Open[0] > bbLowerEntry && rsiValue < rsiLowerLevel)//buying
       {

@@ -9,7 +9,7 @@
 #property strict
 #include <CustomFunctions01.mqh>
 
-int bbPeriod = 20;
+input int bbPeriod = 50;
 int band1Std = 1;
 int band2Std = 4;
 int magicNumber = 22222;
