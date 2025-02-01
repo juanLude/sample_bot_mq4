@@ -11,7 +11,7 @@
 
 // Input parameters
 input double LotSize = 0.1;                 // Lot size
-input int Slippage = 3;                     // Maximum slippage (in points)
+input int Slippage = 20;                     // Maximum slippage (in points) slippage is measured in points, not pips, in MQL4. 10 points = 1 pip
 input int DistancePips = 12;                // Distance from ask price (in pips)
 input int StopLossPips = 12;                // Stop loss distance (in pips)
 input int NewsMinutes = 3;                  // Minutes before news to set orders
@@ -44,6 +44,8 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+
+    // Point is a predefined variable that represents the smallest price increment. For 5-digit brokers (e.g., EURUSD = 1.12345), Point = 0.00001
 //---
     datetime NewsReleaseTime = StrToTime(StringConcatenate(TimeToString(TimeCurrent(), TIME_DATE), " ", NewsTime));
     datetime CurrentTime = TimeCurrent();
@@ -62,7 +64,7 @@ void OnTick()
             LotSize,
             BuyStopPrice,
             Slippage,
-            NormalizeDouble(BuyStopPrice - StopLossPips * Point, Digits),
+            NormalizeDouble(BuyStopPrice - AskPrice, Digits),
             0,
             "News Buy Order",
             0,
@@ -77,7 +79,7 @@ void OnTick()
             LotSize,
             SellStopPrice,
             Slippage,
-            NormalizeDouble(SellStopPrice + StopLossPips * Point, Digits),
+            NormalizeDouble(SellStopPrice + BidPrice, Digits),
             0,
             "News Sell Order",
             0,
@@ -104,7 +106,7 @@ void OnTick()
                 OrderModify(
                     BuyOrderTicket,
                     OrderOpenPrice(),
-                    NormalizeDouble(OrderOpenPrice() - StopLossPips * Point, Digits),
+                    NormalizeDouble(OrderOpenPrice() - AskPrice, Digits),
                     0,
                     0,
                     clrBlue
@@ -117,7 +119,7 @@ void OnTick()
                 OrderModify(
                     SellOrderTicket,
                     OrderOpenPrice(),
-                    NormalizeDouble(OrderOpenPrice() + StopLossPips * Point, Digits),
+                    NormalizeDouble(OrderOpenPrice() + BidPrice, Digits),
                     0,
                     0,
                     clrRed
