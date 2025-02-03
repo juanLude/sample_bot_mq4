@@ -8,163 +8,95 @@
 #property version   "1.00"
 #property strict
 
-
 // Input parameters
-input double LotSize = 0.1;                 // Lot size
-input int Slippage = 20;                     // Maximum slippage (in points) slippage is measured in points, not pips, in MQL4. 10 points = 1 pip
-input int DistancePips = 12;                // Distance from ask price (in pips)
-input int StopLossPips = 12;                // Stop loss distance (in pips)
-input int NewsMinutes = 3;                  // Minutes before news to set orders
-input string NewsTime = "17:00";            // Time of the news release (hh:mm, broker time)
+input double LotSize = 0.02;
+input int Slippage = 20;
+input int DistancePips = 12;
+input int StopLossPips = 12;
+input int NewsMinutes = 3;
+input string NewsTime = "02:30";
 
-int BuyOrderTicket = -1;                    // Ticket for the buy order
-int SellOrderTicket = -1;                   // Ticket for the sell order
-bool OrdersPlaced = false;                  // Prevent placing orders multiple times
+int BuyOrderTicket = -1;
+int SellOrderTicket = -1;
+bool OrdersPlaced = false;
+bool OrderExecuted = false;
 
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
-int OnInit()
-  {
-//---
-   Alert("Starting News Strategy");
-//---
-   return(INIT_SUCCEEDED);
-  }
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
-  {
-//---
-   Alert("Stopping News Strategy");
-  }
-//+------------------------------------------------------------------+
-//| Expert tick function                                             |
-//+------------------------------------------------------------------+
-void OnTick()
-  {
+int OnInit() {
+    Alert("Starting News Strategy");
+    return INIT_SUCCEEDED;
+}
 
-    // Point is a predefined variable that represents the smallest price increment. For 5-digit brokers (e.g., EURUSD = 1.12345), Point = 0.00001
-//---
-    datetime NewsReleaseTime = StrToTime(StringConcatenate(TimeToString(TimeCurrent(), TIME_DATE), " ", NewsTime));
-    datetime CurrentTime = TimeCurrent();
-
-    // Check if it's 3 minutes before the news release
-    if ((NewsReleaseTime - CurrentTime) <= (NewsMinutes * 60) && !OrdersPlaced) {
-        double AskPrice = NormalizeDouble(Ask, Digits);
-        double BidPrice = NormalizeDouble(Bid, Digits);
-        double BuyStopPrice = NormalizeDouble(AskPrice + DistancePips * Point, Digits);
-        double SellStopPrice = NormalizeDouble(BidPrice - DistancePips * Point, Digits);
-
-        // Place buy stop order
-        BuyOrderTicket = OrderSend(
-            Symbol(),
-            OP_BUYSTOP,
-            LotSize,
-            BuyStopPrice,
-            Slippage,
-            NormalizeDouble(BuyStopPrice - AskPrice, Digits),
-            0,
-            "News Buy Order",
-            0,
-            0,
-            clrBlue
-        );
-
-        // Place sell stop order
-        SellOrderTicket = OrderSend(
-            Symbol(),
-            OP_SELLSTOP,
-            LotSize,
-            SellStopPrice,
-            Slippage,
-            NormalizeDouble(SellStopPrice + BidPrice, Digits),
-            0,
-            "News Sell Order",
-            0,
-            0,
-            clrRed
-        );
-
-        // Check for errors
-        if (BuyOrderTicket < 0 || SellOrderTicket < 0) {
-            Print("Error placing orders: ", ErrorDescription(GetLastError()));
-        } else {
-            Print("Orders placed successfully.");
-            OrdersPlaced = true;
-        }
-    }
-
-    // Adjust stop losses to maintain a 12-pip distance from current prices
-    if (OrdersPlaced) {
-        double AskPrice = NormalizeDouble(Ask, Digits);
-        double BidPrice = NormalizeDouble(Bid, Digits);
-
-        if (OrderSelect(BuyOrderTicket, SELECT_BY_TICKET)) {
-            if (OrderType() == OP_BUYSTOP) {
-                OrderModify(
-                    BuyOrderTicket,
-                    OrderOpenPrice(),
-                    NormalizeDouble(OrderOpenPrice() - AskPrice, Digits),
-                    0,
-                    0,
-                    clrBlue
-                );
-            }
-        }
-
-        if (OrderSelect(SellOrderTicket, SELECT_BY_TICKET)) {
-            if (OrderType() == OP_SELLSTOP) {
-                OrderModify(
-                    SellOrderTicket,
-                    OrderOpenPrice(),
-                    NormalizeDouble(OrderOpenPrice() + BidPrice, Digits),
-                    0,
-                    0,
-                    clrRed
-                );
-            }
-        }
-    }
-
-    // Monitor orders and cancel the opposite order if one is executed
-    for (int i = OrdersTotal() - 1; i >= 0; i--) {
-        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-            // Check if a buy stop order was executed
-            if (OrderTicket() == BuyOrderTicket && OrderType() == OP_BUY) {
-                CancelOrder(SellOrderTicket);
-                BuyOrderTicket = -1;  // Reset ticket to avoid multiple cancellations
-            }
-            // Check if a sell stop order was executed
-            else if (OrderTicket() == SellOrderTicket && OrderType() == OP_SELL) {
-                CancelOrder(BuyOrderTicket);
-                SellOrderTicket = -1;  // Reset ticket to avoid multiple cancellations
-            }
-        }
-    }
+void OnDeinit(const int reason) {
+    Alert("Stopping News Strategy");
 }
 
 void CancelOrder(int ticket) {
     if (OrderSelect(ticket, SELECT_BY_TICKET)) {
         if (OrderType() == OP_BUYSTOP || OrderType() == OP_SELLSTOP) {
-            bool canceled = OrderDelete(ticket);
-            if (canceled) {
+            if (OrderDelete(ticket)) {
                 Print("Order ", ticket, " canceled successfully.");
             } else {
-                Print("Error canceling order ", ticket, ": ", ErrorDescription(GetLastError()));
+                Print("Error canceling order ", ticket, ": ", GetLastError());
             }
         }
     }
 }
 
-string ErrorDescription(int error) {
-    switch (error) {
-        case ERR_NO_ERROR: return "No error";
-        case ERR_INVALID_TRADE_PARAMETERS: return "Invalid trade parameters";
-        case ERR_NOT_ENOUGH_MONEY: return "Not enough money";
-        case ERR_TRADE_TIMEOUT: return "Trade timeout";
-        // Add more error cases if needed
-        default: return "Unknown error";
-    }  }
+void OnTick() {
+    datetime NewsReleaseTime = StrToTime(StringConcatenate(TimeToString(TimeCurrent(), TIME_DATE), " ", NewsTime));
+    datetime CurrentTime = TimeCurrent();
+    
+    double AskPrice = NormalizeDouble(Ask, Digits);
+    double BidPrice = NormalizeDouble(Bid, Digits);
+    double BuyStopPrice = NormalizeDouble(AskPrice + DistancePips * Point, Digits);
+    double SellStopPrice = NormalizeDouble(BidPrice - DistancePips * Point, Digits);
+    double BuyStopLoss = NormalizeDouble(AskPrice - StopLossPips * Point, Digits);
+    double SellStopLoss = NormalizeDouble(BidPrice + StopLossPips * Point, Digits);
+    
+    if ((NewsReleaseTime - CurrentTime) <= (NewsMinutes * 60) && !OrdersPlaced) {
+        BuyOrderTicket = OrderSend(Symbol(), OP_BUYSTOP, LotSize, BuyStopPrice, Slippage, BuyStopLoss, 0, "News Buy Order", 0, 0, clrBlue);
+        SellOrderTicket = OrderSend(Symbol(), OP_SELLSTOP, LotSize, SellStopPrice, Slippage, SellStopLoss, 0, "News Sell Order", 0, 0, clrRed);
+        
+        if (BuyOrderTicket < 0 || SellOrderTicket < 0) {
+            Print("Error placing orders: ", GetLastError());
+        } else {
+            Print("Orders placed successfully.");
+            OrdersPlaced = true;
+        }
+    }
+    
+    if (OrdersPlaced && !OrderExecuted) {
+        if (OrderSelect(BuyOrderTicket, SELECT_BY_TICKET)) {
+            if (OrderType() == OP_BUYSTOP) {
+                if (!OrderModify(BuyOrderTicket, BuyStopPrice, BuyStopLoss, 0, 0, clrBlue)) {
+                    Print("Error modifying Buy Stop order: ", GetLastError());
+                }
+            }
+        }
+        if (OrderSelect(SellOrderTicket, SELECT_BY_TICKET)) {
+            if (OrderType() == OP_SELLSTOP) {
+                if (!OrderModify(SellOrderTicket, SellStopPrice, SellStopLoss, 0, 0, clrRed)) {
+                    Print("Error modifying Sell Stop order: ", GetLastError());
+                }
+            }
+        }
+    }
+    
+    for (int i = OrdersTotal() - 1; i >= 0; i--) {
+        if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+            if (OrderTicket() == BuyOrderTicket && OrderType() == OP_BUY) {
+                CancelOrder(SellOrderTicket);
+                OrderExecuted = true;
+                Alert("Sell Order has been cancelled");
+            } else if (OrderTicket() == SellOrderTicket && OrderType() == OP_SELL) {
+                CancelOrder(BuyOrderTicket);
+                OrderExecuted = true;
+                Alert("Buy Order has been cancelled");
+            }
+        }
+    }
+}
+
+
+
 //+------------------------------------------------------------------+
