@@ -5,21 +5,25 @@
 //+------------------------------------------------------------------+
 #property copyright "Juan Ludevid"
 #property link      "https://www.mql5.com"
-#property version   "1.00"
+#property version   "1.01"
 #property strict
 
 // Input parameters
-input double LotSize = 0.02;
+input double LotSize = 0.1;
 input int Slippage = 20;
-input int DistancePips = 12;
-input int StopLossPips = 12;
-input int NewsMinutes = 3;
+input int DistancePips = 6; // change back to 12
+input int StopLossPips = 6; // change back to 12
+input int BreakEvenPips = 5;
+input int TrailingStopPips = 10;
+input int NewsMinutes = 1; // place buy and sell stop orders 1 minute prior to news release
 input string NewsTime = "02:30";
 
 int BuyOrderTicket = -1;
 int SellOrderTicket = -1;
 bool OrdersPlaced = false;
 bool OrderExecuted = false;
+bool BuyOrderCancelled = false;
+bool SellOrderCancelled = false;
 
 int OnInit() {
     Alert("Starting News Strategy");
@@ -27,17 +31,27 @@ int OnInit() {
 }
 
 void OnDeinit(const int reason) {
-    Alert("Stopping News Strategy");
+    Alert("News Strategy Stopped");
 }
 
 void CancelOrder(int ticket) {
-    if (OrderSelect(ticket, SELECT_BY_TICKET)) {
+    if (OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES)) {
         if (OrderType() == OP_BUYSTOP || OrderType() == OP_SELLSTOP) {
             if (OrderDelete(ticket)) {
                 Print("Order ", ticket, " canceled successfully.");
             } else {
                 Print("Error canceling order ", ticket, ": ", GetLastError());
             }
+        }
+    }
+}
+
+void AdjustStopLoss(int ticket, double newStopLoss) {
+    if (OrderSelect(ticket, SELECT_BY_TICKET, MODE_TRADES)) {
+        if (OrderModify(ticket, OrderOpenPrice(), newStopLoss, 0, 0, clrNONE)) {
+            Print("Stop loss adjusted for order ", ticket, " to ", newStopLoss);
+        } else {
+            Print("Error modifying stop loss: ", GetLastError());
         }
     }
 }
@@ -49,7 +63,7 @@ void OnTick() {
     double AskPrice = NormalizeDouble(Ask, Digits);
     double BidPrice = NormalizeDouble(Bid, Digits);
     double BuyStopPrice = NormalizeDouble(AskPrice + DistancePips * Point, Digits);
-    double SellStopPrice = NormalizeDouble(BidPrice - DistancePips * Point, Digits);
+    double SellStopPrice = NormalizeDouble(BidPrice, Digits);
     double BuyStopLoss = NormalizeDouble(AskPrice - StopLossPips * Point, Digits);
     double SellStopLoss = NormalizeDouble(BidPrice + StopLossPips * Point, Digits);
     
@@ -65,38 +79,42 @@ void OnTick() {
         }
     }
     
-    if (OrdersPlaced && !OrderExecuted) {
-        if (OrderSelect(BuyOrderTicket, SELECT_BY_TICKET)) {
-            if (OrderType() == OP_BUYSTOP) {
-                if (!OrderModify(BuyOrderTicket, BuyStopPrice, BuyStopLoss, 0, 0, clrBlue)) {
-                    Print("Error modifying Buy Stop order: ", GetLastError());
-                }
-            }
-        }
-        if (OrderSelect(SellOrderTicket, SELECT_BY_TICKET)) {
-            if (OrderType() == OP_SELLSTOP) {
-                if (!OrderModify(SellOrderTicket, SellStopPrice, SellStopLoss, 0, 0, clrRed)) {
-                    Print("Error modifying Sell Stop order: ", GetLastError());
-                }
-            }
-        }
-    }
-    
     for (int i = OrdersTotal() - 1; i >= 0; i--) {
         if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-            if (OrderTicket() == BuyOrderTicket && OrderType() == OP_BUY) {
-                CancelOrder(SellOrderTicket);
-                OrderExecuted = true;
-                Alert("Sell Order has been cancelled");
-            } else if (OrderTicket() == SellOrderTicket && OrderType() == OP_SELL) {
-                CancelOrder(BuyOrderTicket);
-                OrderExecuted = true;
-                Alert("Buy Order has been cancelled");
+            int orderType = OrderType();
+            double orderOpenPrice = OrderOpenPrice();
+            double currentStopLoss = OrderStopLoss();
+            
+            if (OrderTicket() == BuyOrderTicket && orderType == OP_BUY) {
+                if (BidPrice >= orderOpenPrice + (BreakEvenPips * Point) && currentStopLoss < orderOpenPrice) {
+                    AdjustStopLoss(BuyOrderTicket, orderOpenPrice);
+                }
+                if (BidPrice >= currentStopLoss + (TrailingStopPips * Point)) {
+                    AdjustStopLoss(BuyOrderTicket, BidPrice - (TrailingStopPips * Point));
+                }
+                if (!SellOrderCancelled) {
+                    CancelOrder(SellOrderTicket);
+                    OrderExecuted = true;
+                    SellOrderTicket = -1;
+                    Alert("Sell Order has been cancelled");
+                    SellOrderCancelled = true;
+                }
+            } 
+            else if (OrderTicket() == SellOrderTicket && orderType == OP_SELL) {
+                if (AskPrice <= orderOpenPrice - (BreakEvenPips * Point) && currentStopLoss > orderOpenPrice) {
+                    AdjustStopLoss(SellOrderTicket, orderOpenPrice);
+                }
+                if (AskPrice <= currentStopLoss - (TrailingStopPips * Point)) {
+                    AdjustStopLoss(SellOrderTicket, AskPrice + (TrailingStopPips * Point));
+                }
+                if (!BuyOrderCancelled) {
+                    CancelOrder(BuyOrderTicket);
+                    OrderExecuted = true;
+                    BuyOrderTicket = -1;
+                    Alert("Buy Order has been cancelled");
+                    BuyOrderCancelled = true;
+                }
             }
         }
     }
 }
-
-
-
-//+------------------------------------------------------------------+
