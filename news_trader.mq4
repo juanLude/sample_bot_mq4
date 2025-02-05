@@ -11,8 +11,8 @@
 // Input parameters
 input double LotSize = 0.1;
 input int Slippage = 20;
-input int DistancePips = 6; // change back to 12
-input int StopLossPips = 6; // change back to 12
+input int DistancePips = 12; // restored
+input int StopLossPips = 12; // restored
 input int BreakEvenPips = 5;
 input int TrailingStopPips = 10;
 input int NewsMinutes = 1; // place buy and sell stop orders 1 minute prior to news release
@@ -22,8 +22,6 @@ int BuyOrderTicket = -1;
 int SellOrderTicket = -1;
 bool OrdersPlaced = false;
 bool OrderExecuted = false;
-bool BuyOrderCancelled = false;
-bool SellOrderCancelled = false;
 
 int OnInit() {
     Alert("Starting News Strategy");
@@ -63,7 +61,7 @@ void OnTick() {
     double AskPrice = NormalizeDouble(Ask, Digits);
     double BidPrice = NormalizeDouble(Bid, Digits);
     double BuyStopPrice = NormalizeDouble(AskPrice + DistancePips * Point, Digits);
-    double SellStopPrice = NormalizeDouble(BidPrice, Digits);
+    double SellStopPrice = NormalizeDouble(BidPrice - DistancePips * Point, Digits);
     double BuyStopLoss = NormalizeDouble(AskPrice - StopLossPips * Point, Digits);
     double SellStopLoss = NormalizeDouble(BidPrice + StopLossPips * Point, Digits);
     
@@ -92,12 +90,10 @@ void OnTick() {
                 if (BidPrice >= currentStopLoss + (TrailingStopPips * Point)) {
                     AdjustStopLoss(BuyOrderTicket, BidPrice - (TrailingStopPips * Point));
                 }
-                if (!SellOrderCancelled) {
+                if (SellOrderTicket > 0) {
                     CancelOrder(SellOrderTicket);
-                    OrderExecuted = true;
                     SellOrderTicket = -1;
                     Alert("Sell Order has been cancelled");
-                    SellOrderCancelled = true;
                 }
             } 
             else if (OrderTicket() == SellOrderTicket && orderType == OP_SELL) {
@@ -107,12 +103,10 @@ void OnTick() {
                 if (AskPrice <= currentStopLoss - (TrailingStopPips * Point)) {
                     AdjustStopLoss(SellOrderTicket, AskPrice + (TrailingStopPips * Point));
                 }
-                if (!BuyOrderCancelled) {
+                if (BuyOrderTicket > 0) {
                     CancelOrder(BuyOrderTicket);
-                    OrderExecuted = true;
                     BuyOrderTicket = -1;
                     Alert("Buy Order has been cancelled");
-                    BuyOrderCancelled = true;
                 }
             }
         }
